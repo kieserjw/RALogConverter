@@ -28,7 +28,7 @@ namespace RALogConverter
         {
 
             string postUrl = "http://www.running2win.com/pleaselogin.asp";
-            string postData = String.Format("txtUsername={0}&txtPassword={1}&btnLogin={2}", "kieserjw2", "testTEST", "Sign In");
+            string postData = String.Format("txtUsername={0}&txtPassword={1}&btnLogin={2}", "kieserjw2", "test...", "Sign In");
             HttpWebRequest getRequest = (HttpWebRequest)WebRequest.Create(postUrl);
             CookieContainer cookieJar = new CookieContainer();
             getRequest.CookieContainer = cookieJar;
