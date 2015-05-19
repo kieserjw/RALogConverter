@@ -29,7 +29,7 @@ namespace RALogConverter
         {
             String sd = "1/1/2000";            //start date
             String ed = "12/31/2015";           //end date            
-            String txtUserID = "kieserjw";  //desired account's username (use %20 for spaces)
+            String txtUserID = "kieserjw2";  //desired account's username (use %20 for spaces)
 
             String txtUsername = "kieserjw2";  //Any account's username
             String txtPassword = "";   //That account's pw
@@ -40,13 +40,7 @@ namespace RALogConverter
             String lstCategory = "0";
 
             String uk = "";
-
-            if (txtUserID.Equals(txtUsername))
-            {
-                Console.WriteLine("Cannot use same account for log in as target data.  Please create dummy log in account");
-                return; //MAJOR BUG
-            }
-
+            
             //BEGIN LOGIN ---------------
 
             String postUrl = "http://www.running2win.com/verifylogin.asp";
@@ -114,7 +108,7 @@ namespace RALogConverter
                 Console.WriteLine("User log is private"); 
                 return;
             }
-            //System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);  //TESTING PURPOSES.  it's easier to see the html in browser (as compared to the local variable window)
+            
 
             int startIndex = sourceCode.IndexOf("<a href=\"view-member-running-log.asp?uk=") + 40;  //look for the UK key associated with this particular UserID
             int endIndex = sourceCode.IndexOf("\"", startIndex);
@@ -167,8 +161,9 @@ namespace RALogConverter
                 }
 
                 newStream.Close();
-                Translator t = new Translator();
                 
+                System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);  //TESTING PURPOSES.  it's easier to see the html in browser (as compared to the local variable window)
+                Translator t = new Translator();
 
 #if CATCH_AT_RUNTIME //added try/catch to catch errors and retry data requests at runtime.  comment out #def CATCH_AT_RUNTIME @ line 1 to resume catching errors in the C# environment
                 try
@@ -213,7 +208,8 @@ namespace RALogConverter
 
                 int index = sourceCode.IndexOf("<p>&nbsp;</p>")+13;
                 sourceCode = sourceCode.Substring(index, sourceCode.LastIndexOf("<p>&nbsp;</p>") - index).Replace("\t", "");  //parse out the actual entries
-                if (sourceCode.Length > 5)
+                //gotta be longer than just \n and not starting with string that indicates no data
+                if (sourceCode.Length > 5 && !sourceCode.StartsWith("\n<table width=\"100%\" ID=\"Table3\">"))
                 {
                     doc.LoadHtml(sourceCode);
                     t.translateFromSite(doc);
@@ -244,6 +240,10 @@ namespace RALogConverter
                     sw.WriteLine(sb.ToString());
                     Console.WriteLine(output);
                 }
+            }
+            else
+            {
+                Console.WriteLine("No entries to write");
             }
 
         }
