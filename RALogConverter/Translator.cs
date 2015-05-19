@@ -37,11 +37,11 @@ namespace RALogConverter
                 LogEntry le = new LogEntry();
 
                 setDateActivityInfoFromSite(le, genInfo.InnerText.Split('\n'));
-                if (le.getDate().Date.Equals(DateTime.Parse("5/23/2011", System.Globalization.CultureInfo.InvariantCulture)))
+                if (false && le.getDate().Date.Equals(DateTime.Parse("5/18/2014", System.Globalization.CultureInfo.InvariantCulture)))
                 {
                     int ps = 0;//testing purposes
                 }
-                setGenInfoFromSite(le, otherInfo.InnerText.Replace("\r", "").Split('\n'));
+                setGenInfoFromSite(le, otherInfo);
                 if (entryNode.ChildNodes[5].InnerText.StartsWith("\nRace Info"))
                 {
                     HtmlNode raceInfo = entryNode.ChildNodes[5];
@@ -63,16 +63,16 @@ namespace RALogConverter
                 }
 
                 entryList.Add(le);
-                Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
+                //Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             }
         }
 
-        private void setGenInfoFromSite(LogEntry le, string[] genInfo)
+        private void setGenInfoFromSite(LogEntry le, HtmlNode genInfoNode)
         {
+            String[] genInfo = genInfoNode.InnerText.Replace("\r", "").Split('\n');
             int i = 0;
-            while (!genInfo[i].StartsWith("Comments")) i++;
-            String notes = genInfo[++i];
+            String notes = genInfoNode.ChildNodes[3].ChildNodes[5].InnerHtml.Replace("<br>", "\n");
             while (!genInfo[i].StartsWith("Total distance")) i++;
             String distanceStr = genInfo[i = i + 2];
             while (!genInfo[i].StartsWith("Course")) i++;

@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace RALogConverter
@@ -20,17 +21,19 @@ namespace RALogConverter
         {
             Translator t = new Translator();
             //readFromFiles(t,"");
-            RunAsync().Wait();
+            //RunAsync().Wait();
+            getDataFromSite();
             Console.ReadKey();
         }
 
-        static async Task RunAsync()
+        //static async Task RunAsync()
+        private static void getDataFromSite()
         {
             string sd = "1/1/2000";            //start date
-            string ed = "12/1/2015";           //end date
+            string ed = "12/31/2015";           //end date
             String txtUsername = "kieserjw2";  //Any account's username
-            String txtPassword = "";           //That account's pw
-            String txtUserID = "dgreeno";      //desired account's username
+            String txtPassword = "TESTtest";   //That account's pw
+            String txtUserID = "Finan";  //desired account's username (use %20 for spaces)
             
             String txtLastName = "";
             String txtCity = "";
@@ -44,11 +47,9 @@ namespace RALogConverter
             String postUrl = "http://www.running2win.com/verifylogin.asp";
             String postData = String.Format("txtUsername={0}&txtPassword={1}&btnLogin={2}", txtUsername, txtPassword, "Sign In");
 
-
             HttpWebRequest getRequest = (HttpWebRequest)WebRequest.Create(postUrl);
             CookieContainer cookieJar = new CookieContainer();
-            getRequest.CookieContainer = cookieJar;
-            //getRequest.CookieContainer.Add(cookies); //recover cookies First request
+            getRequest.CookieContainer = cookieJar;            
             getRequest.Method = WebRequestMethods.Http.Post;
             getRequest.UserAgent = "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/535.2 (KHTML, like Gecko) Chrome/15.0.874.121 Safari/535.2";
             getRequest.AllowWriteStreamBuffering = true;
@@ -78,8 +79,7 @@ namespace RALogConverter
             postData = String.Format("txtLastName={0}&txtUserName={1}&txtCity={2}&lstState={3}&lstCategory={4}&btnSearch={5}", txtLastName, txtUserID, txtCity, lstState, lstCategory, "Submit search criteria");
 
             getRequest = (HttpWebRequest)WebRequest.Create(postUrl);
-            getRequest.CookieContainer = cookieJar;
-            //getRequest.CookieContainer.Add(cookies); //recover cookies First request
+            getRequest.CookieContainer = cookieJar;            
             getRequest.Method = WebRequestMethods.Http.Post;
             getRequest.UserAgent = "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/535.2 (KHTML, like Gecko) Chrome/15.0.874.121 Safari/535.2";
             getRequest.AllowWriteStreamBuffering = true;
@@ -99,20 +99,22 @@ namespace RALogConverter
             {
                 sourceCode = sr.ReadToEnd();
             }
+            if (sourceCode.Contains("Please log in")) Console.WriteLine("Please log in");
             
 
 
             int startIndex = sourceCode.IndexOf("<a href=\"view-member-running-log.asp?uk=") + 40;
             int endIndex = sourceCode.IndexOf("\"", startIndex);
 
+            System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);
             uk = sourceCode.Substring(startIndex, endIndex - startIndex);
-            //uk = "FGCIBRRPPFPXGMTGY42OQKSACSIGGOBFEZBXVBPQF29564UGWTKAQEOMHEJCTJKFWHGCTI";
-
+            if (uk.Length != 70 && Regex.Matches(uk, @"[^A-Z0-9]").Count > 0) Console.WriteLine("bad UK or UserID");            
+            
             //END USER ID ---------------
 
             DateTime start = DateTime.Parse(sd, System.Globalization.CultureInfo.InvariantCulture);
             DateTime end = DateTime.Parse(ed, System.Globalization.CultureInfo.InvariantCulture);
-            if (ed.CompareTo(sd) < 0)
+            if (end.CompareTo(start) < 0)
             {
                 DateTime tmp = end;
                 end = start;
@@ -126,7 +128,7 @@ namespace RALogConverter
             }
             dateList.Add(end.AddDays(1));
 
-            Translator t = new Translator();
+            Translator translator = new Translator();
 
 
             //BEGIN DATA RETRIEVAL ---------------
@@ -152,10 +154,28 @@ namespace RALogConverter
                 }
 
                 newStream.Close();
-                readFromSite(t, sourceCode);
+                Translator t = new Translator();
+                try
+                {
+                    readFromSite(t, sourceCode);
+                    if (t.getEntryList().Count > 0)
+                    {
+                        translator.getEntryList().AddRange(t.getEntryList());
+                        
+                    }
+                    Console.WriteLine(sd + " - " + ed + " -- " + t.getEntryList().Count);
+                }
+                catch (Exception e)
+                {
+                    LogEntry le = ((LogEntry)t.getEntryList()[t.getEntryList().Count-1]);
+                    Console.WriteLine("Error after date: "+le.getDate().ToShortTimeString());
+                    Console.WriteLine(le.getNotes());
+                    Console.WriteLine(e.ToString());               
+                    i--;
+                }
 
             }
-            writeFileFromSite(t, txtUserID, ((DateTime)dateList[0]).ToShortDateString().Replace("/", "-"), ed.Replace("/", "-"));
+            writeFileFromSite(translator, txtUserID, ((DateTime)dateList[0]).ToShortDateString().Replace("/", "-"), ed.Replace("/", "-"));
             //END DATA RETRIEVAL ---------------         
 
         }
@@ -173,11 +193,7 @@ namespace RALogConverter
                 {
                     doc.LoadHtml(sourceCode);
                     t.translateFromSite(doc);
-                }
-                else
-                {
-                    Console.WriteLine("No entries");
-                }
+                }                
             }
         }
 
