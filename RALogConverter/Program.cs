@@ -162,7 +162,7 @@ namespace RALogConverter
 
                 newStream.Close();
                 
-                System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);  //TESTING PURPOSES.  it's easier to see the html in browser (as compared to the local variable window)
+                //System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);  //TESTING PURPOSES.  it's easier to see the html in browser (as compared to the local variable window)
                 Translator t = new Translator();
 
 #if CATCH_AT_RUNTIME //added try/catch to catch errors and retry data requests at runtime.  comment out #def CATCH_AT_RUNTIME @ line 1 to resume catching errors in the C# environment
