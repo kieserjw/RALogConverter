@@ -1,4 +1,4 @@
-﻿//#define CATCH_AT_RUNTIME
+﻿#define CATCH_AT_RUNTIME
 
 using HtmlAgilityPack;
 using System;
