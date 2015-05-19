@@ -1,4 +1,6 @@
-﻿using HtmlAgilityPack;
+﻿//#define CATCH_AT_RUNTIME
+
+using HtmlAgilityPack;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -18,22 +20,19 @@ namespace RALogConverter
     class Program
     {
         static void Main(string[] args)
-        {
-            Translator t = new Translator();
-            //readFromFiles(t,"");
-            //RunAsync().Wait();
+        {                        
             getDataFromSite();
             Console.ReadKey();
         }
-
-        //static async Task RunAsync()
+        
         private static void getDataFromSite()
         {
-            string sd = "1/1/2000";            //start date
-            string ed = "12/31/2015";           //end date
+            String sd = "1/1/2000";            //start date
+            String ed = "12/31/2015";           //end date            
+            String txtUserID = "kieserjw";  //desired account's username (use %20 for spaces)
+
             String txtUsername = "kieserjw2";  //Any account's username
-            String txtPassword = "TESTtest";   //That account's pw
-            String txtUserID = "Finan";  //desired account's username (use %20 for spaces)
+            String txtPassword = "";   //That account's pw
             
             String txtLastName = "";
             String txtCity = "";
@@ -41,6 +40,12 @@ namespace RALogConverter
             String lstCategory = "0";
 
             String uk = "";
+
+            if (txtUserID.Equals(txtUsername))
+            {
+                Console.WriteLine("Cannot use same account for log in as target data.  Please create dummy log in account");
+                return; //MAJOR BUG
+            }
 
             //BEGIN LOGIN ---------------
 
@@ -64,16 +69,16 @@ namespace RALogConverter
             newStream.Write(byteArray, 0, byteArray.Length); // Send the data.            
 
             HttpWebResponse getResponse = (HttpWebResponse)getRequest.GetResponse();
-            string sourceCode = null;
+            String sourceCode = null;
             using (StreamReader sr = new StreamReader(getResponse.GetResponseStream()))
             {
-                sourceCode = sr.ReadToEnd();
+                sourceCode = sr.ReadToEnd();  //this sourcecode is never read.  We only need the cookies from the log in
             }
 
             //END LOGIN ---------------
 
 
-            //BEGIN USER ID ---------------
+            //BEGIN USER ID TO UK---------------
 
             postUrl = "http://www.running2win.com/community/UserSearch.asp";
             postData = String.Format("txtLastName={0}&txtUserName={1}&txtCity={2}&lstState={3}&lstCategory={4}&btnSearch={5}", txtLastName, txtUserID, txtCity, lstState, lstCategory, "Submit search criteria");
@@ -99,22 +104,32 @@ namespace RALogConverter
             {
                 sourceCode = sr.ReadToEnd();
             }
-            if (sourceCode.Contains("Please log in")) Console.WriteLine("Please log in");
-            
+            if (sourceCode.Contains("Please log in"))
+            {
+                Console.WriteLine("Error with log in"); 
+                return;
+            }
+            if (sourceCode.Contains(">No<"))
+            {
+                Console.WriteLine("User log is private"); 
+                return;
+            }
+            //System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);  //TESTING PURPOSES.  it's easier to see the html in browser (as compared to the local variable window)
 
-
-            int startIndex = sourceCode.IndexOf("<a href=\"view-member-running-log.asp?uk=") + 40;
+            int startIndex = sourceCode.IndexOf("<a href=\"view-member-running-log.asp?uk=") + 40;  //look for the UK key associated with this particular UserID
             int endIndex = sourceCode.IndexOf("\"", startIndex);
-
-            System.IO.File.WriteAllText(@"C:/Users/Jeremy/Downloads/test.html", sourceCode);
+        
             uk = sourceCode.Substring(startIndex, endIndex - startIndex);
-            if (uk.Length != 70 && Regex.Matches(uk, @"[^A-Z0-9]").Count > 0) Console.WriteLine("bad UK or UserID");            
-            
-            //END USER ID ---------------
+            if (uk.Length != 70 && Regex.Matches(uk, @"[^A-Z0-9]").Count > 0)
+            {
+                Console.WriteLine("bad UK or UserID");  //UK key should be 70 chars of capital alphas or numerics
+                return;
+            }
+            //END USER ID TO UK---------------
 
             DateTime start = DateTime.Parse(sd, System.Globalization.CultureInfo.InvariantCulture);
             DateTime end = DateTime.Parse(ed, System.Globalization.CultureInfo.InvariantCulture);
-            if (end.CompareTo(start) < 0)
+            if (end.CompareTo(start) < 0)  //if start and end dates are out of order, flip them
             {
                 DateTime tmp = end;
                 end = start;
@@ -122,74 +137,83 @@ namespace RALogConverter
             }
             ArrayList dateList = new ArrayList();
             dateList.Add(start);
-            while (end.CompareTo(((DateTime)dateList[dateList.Count - 1]).AddYears(1)) > 0)
+            while (end.CompareTo(((DateTime)dateList[dateList.Count - 1]).AddYears(1)) > 0) //create a list of date intervals that are at most 1 year long
             {
                 dateList.Add(((DateTime)dateList[dateList.Count - 1]).AddYears(1));
             }
-            dateList.Add(end.AddDays(1));
+            dateList.Add(end.AddDays(1));  //add one day for the end to compensate for the removal of a day during the loop
 
-            Translator translator = new Translator();
+            Translator translator = new Translator();  //get one translator to add all others to
 
 
             //BEGIN DATA RETRIEVAL ---------------
-            for (int i = 0; i < dateList.Count - 1; i++)
+            for (int i = 0; i < dateList.Count - 1; i++)  //r2w only supports retrieving 1 year's worth of data at a time, so we must loop through to get the entire range if necessary
             {
                 sd = ((DateTime)dateList[i]).ToShortDateString();
-                ed = ((DateTime)dateList[i + 1]).AddDays(-1).ToShortDateString();
+                ed = ((DateTime)dateList[i + 1]).AddDays(-1).ToShortDateString(); //take off 1 day for the end of the range to avoid duplicates on end dates
 
-                string getUrl = "http://www.running2win.com/community/view-member-running-log.asp";
-                string getData = String.Format("vu={0}&sd={1}&ed={2}&uk={3}", "", sd, ed, uk);
+                String getUrl = "http://www.running2win.com/community/view-member-running-log.asp";
+                String getData = String.Format("vu={0}&sd={1}&ed={2}&uk={3}", "", sd, ed, uk);
 
                 getRequest = (HttpWebRequest)WebRequest.Create(getUrl + "?" + getData);
-
                 getRequest.CookieContainer = cookieJar;
-
                 getRequest.Method = WebRequestMethods.Http.Get;
 
                 getResponse = (HttpWebResponse)getRequest.GetResponse();
                 sourceCode = null;
                 using (StreamReader sr = new StreamReader(getResponse.GetResponseStream()))
                 {
-                    sourceCode = sr.ReadToEnd();
+                    sourceCode = sr.ReadToEnd();  //sourceCode is actual html for the given UserID and daterange
                 }
 
                 newStream.Close();
                 Translator t = new Translator();
+                
+
+#if CATCH_AT_RUNTIME //added try/catch to catch errors and retry data requests at runtime.  comment out #def CATCH_AT_RUNTIME @ line 1 to resume catching errors in the C# environment
                 try
                 {
-                    readFromSite(t, sourceCode);
+#endif
+                    readFromSite(t, sourceCode);  //parse the sourceCode entries and add them to t
                     if (t.getEntryList().Count > 0)
                     {
-                        translator.getEntryList().AddRange(t.getEntryList());
-                        
+                        translator.getEntryList().AddRange(t.getEntryList());   //if there were any entries, add them to the overall set                        
                     }
-                    Console.WriteLine(sd + " - " + ed + " -- " + t.getEntryList().Count);
+                    Console.WriteLine(sd + " - " + ed + " -- " + t.getEntryList().Count);  //display the interval and its number of entries
+#if CATCH_AT_RUNTIME
                 }
                 catch (Exception e)
                 {
-                    LogEntry le = ((LogEntry)t.getEntryList()[t.getEntryList().Count-1]);
-                    Console.WriteLine("Error after date: "+le.getDate().ToShortTimeString());
-                    Console.WriteLine(le.getNotes());
-                    Console.WriteLine(e.ToString());               
-                    i--;
+                    if (t.getEntryList().Count > 0)
+                    {
+                        LogEntry le = ((LogEntry)t.getEntryList()[t.getEntryList().Count - 1]);          //if there was an error, display the last successful entry's date/comment
+                        Console.WriteLine("Error after date: " + le.getDate().ToShortDateString());
+                        Console.WriteLine(le.getNotes());                                                                       
+                    }
+                    Console.WriteLine(e.ToString());                                                    //display the actual error and skip this interval
                 }
+#endif
 
             }
+
+            //END DATA RETRIEVAL ---------------   
+
+
             writeFileFromSite(translator, txtUserID, ((DateTime)dateList[0]).ToShortDateString().Replace("/", "-"), ed.Replace("/", "-"));
-            //END DATA RETRIEVAL ---------------         
+                  
 
         }
 
-        private static void readFromSite(Translator t, string sourceCode)
+        private static void readFromSite(Translator t, String sourceCode)
         {
 
-            if (!sourceCode.Contains("Please log in to your account"))
+            if (!sourceCode.Contains("Please log in to your account"))              //error with the log in
             {
                 HtmlDocument doc = new HtmlDocument();
 
                 int index = sourceCode.IndexOf("<p>&nbsp;</p>")+13;
-                sourceCode = sourceCode.Substring(index, sourceCode.LastIndexOf("<p>&nbsp;</p>") - index).Replace("\t", "");
-                if (sourceCode.Length > 5)//&& !sourceCode.Contains("Create a workout for"))
+                sourceCode = sourceCode.Substring(index, sourceCode.LastIndexOf("<p>&nbsp;</p>") - index).Replace("\t", "");  //parse out the actual entries
+                if (sourceCode.Length > 5)
                 {
                     doc.LoadHtml(sourceCode);
                     t.translateFromSite(doc);
@@ -197,14 +221,41 @@ namespace RALogConverter
             }
         }
 
-        private static void readFromFiles(Translator t)
+        private static void writeFileFromSite(Translator t, String username, String sd, String ed)
+        {
+            if (t.getEntryList().Count != 0)
+            {
+                String header = "Date,Time,Activity,Workout,Distance,Distance Unit,Duration," +
+                        "Course,Equipment Brand,Equipment Model,Equipment Serial,Weight,Weight Unit," +
+                        "Rest HR,Average HR,Max HR,Temperature,Temperature Unit,Quality,Effort,Notes";
+                String folder = @"C:\Users\Jeremy\Documents\Projects\C#\RALogConverter\out\";
+                String output = folder + username + "_" + sd + "_" + ed + DateTime.Now.ToString("_HHmmss") + ".csv";  //outputs to csv file with date range and timestamp in filename
+                StringBuilder sb = new StringBuilder();
+                foreach (LogEntry e in t.getEntryList())  //append all entries to sb
+                {
+                    sb.Append(e.toString());
+                    sb.Append("\n");
+                }
+
+                // Create a file to write to. 
+                using (StreamWriter sw = File.CreateText(output))  //write out the entire file
+                {
+                    sw.WriteLine(header);
+                    sw.WriteLine(sb.ToString());
+                    Console.WriteLine(output);
+                }
+            }
+
+        }
+
+        private static void readFromFiles(Translator t)  //NOT USED FOR WEBSITE CRAWLING
         {
 
             String targetFolder = null;
             bool test = true;
             if (test)
             {
-                targetFolder = @"C:\Users\Jeremy\Downloads\IndyRunner";
+                targetFolder = @"C:\Users\Jeremy\Downloads\";
             }
             else
             {
@@ -243,7 +294,7 @@ namespace RALogConverter
 
         }
 
-        private static void writeFile(Translator t, String folder)
+        private static void writeFile(Translator t, String folder)//NOT USED FOR WEBSITE CRAWLING
         {
             String header = "Date,Time,Activity,Workout,Distance,Distance Unit,Duration," +
                     "Course,Equipment Brand,Equipment Model,Equipment Serial,Weight,Weight Unit," +
@@ -274,31 +325,5 @@ namespace RALogConverter
 
         }
 
-
-        private static void writeFileFromSite(Translator t, String username, String sd, String ed)
-        {
-            if (t.getEntryList().Count != 0)
-            {
-                String header = "Date,Time,Activity,Workout,Distance,Distance Unit,Duration," +
-                        "Course,Equipment Brand,Equipment Model,Equipment Serial,Weight,Weight Unit," +
-                        "Rest HR,Average HR,Max HR,Temperature,Temperature Unit,Quality,Effort,Notes";
-                String output = @"C:\Users\Jeremy\Downloads\" + username + "_" + sd + "_" + ed + DateTime.Now.ToString("_HHmmss") + ".csv";
-                StringBuilder sb = new StringBuilder();
-                foreach (LogEntry e in t.getEntryList())
-                {
-                    sb.Append(e.toString());
-                    sb.Append("\n");
-                }
-
-                // Create a file to write to. 
-                using (StreamWriter sw = File.CreateText(output))
-                {
-                    sw.WriteLine(header);
-                    sw.WriteLine(sb.ToString());
-                    Console.WriteLine(output);
-                }
-            }
-
-        }
     }
 }

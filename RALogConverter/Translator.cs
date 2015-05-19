@@ -26,51 +26,50 @@ namespace RALogConverter
 
         public void translateFromSite(HtmlDocument doc)
         {
-            HtmlNodeCollection tables = doc.DocumentNode.SelectNodes("//table[contains(@class,'encapsule')]");
+            HtmlNodeCollection tables = doc.DocumentNode.SelectNodes("//table[contains(@class,'encapsule')]");  //each entry in tables is one logentry
 
             for (int i = 0; i < tables.Count; i++)
             {
 
                 HtmlNode entryNode = tables[i].ChildNodes[1].ChildNodes[1];
-                HtmlNode genInfo = entryNode.ChildNodes[1].ChildNodes[1];
-                HtmlNode otherInfo = entryNode.ChildNodes[3];
+                HtmlNode dateInfo = entryNode.ChildNodes[1].ChildNodes[1];
+                HtmlNode genInfo = entryNode.ChildNodes[3];
                 LogEntry le = new LogEntry();
 
-                setDateActivityInfoFromSite(le, genInfo.InnerText.Split('\n'));
-                if (false && le.getDate().Date.Equals(DateTime.Parse("5/18/2014", System.Globalization.CultureInfo.InvariantCulture)))
+                if (!dateInfo.InnerText.Contains("Workout not shared")) // must be a public log entry
                 {
-                    int ps = 0;//testing purposes
+
+                    setDateActivityInfoFromSite(le, dateInfo.InnerText.Split('\n'));            //parse the date and time   
+                    setGenInfoFromSite(le, genInfo);                                //parse everything else
+                    if (entryNode.ChildNodes[5].InnerText.StartsWith("\nRace Info"))   //if this entry contains a race, parse it
+                    {
+                        HtmlNode raceInfo = entryNode.ChildNodes[5];
+                        setRaceInfoFromSite(le, raceInfo.InnerText.Replace("\r", "").Split('\n'));
+                    }
+
+                    else if (entryNode.ChildNodes[5].InnerText.StartsWith("\nInterval Info")) //if this entry contains an interval, parse it
+                    {
+                        HtmlNode intervalInfo = entryNode.ChildNodes[5];
+                        setIntervalInfoFromSite(le, intervalInfo.InnerText.Replace("\r", "").Split('\n'));
+
+                    }
+                    else if (entryNode.ChildNodes[5].InnerText.Contains("Cross Training Comments")) //if this entry contains xtrain info, parse it
+                    {
+                        HtmlNode xTrainInfo = entryNode.ChildNodes[5];
+                        xTrainInfo = xTrainInfo.LastChild.PreviousSibling;
+                        setXTrainFromSite(le, xTrainInfo.InnerText.Replace("\r", "").Split('\n'));
+                    }
+
+                    entryList.Add(le);
+                    //Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
+
                 }
-                setGenInfoFromSite(le, otherInfo);
-                if (entryNode.ChildNodes[5].InnerText.StartsWith("\nRace Info"))
-                {
-                    HtmlNode raceInfo = entryNode.ChildNodes[5];
-                    setRaceInfoFromSite(le, raceInfo.InnerText.Replace("\r", "").Split('\n'));
-                }
-
-                else if (entryNode.ChildNodes[5].InnerText.StartsWith("\nInterval Info"))
-                {
-                    HtmlNode intervalInfo = entryNode.ChildNodes[5];
-                    setIntervalInfoFromSite(le, intervalInfo.InnerText.Replace("\r", "").Split('\n'));
-
-                }
-                else if (entryNode.ChildNodes[5].InnerText.Contains("Cross Training Comments"))
-                {
-                    HtmlNode xTrainInfo = entryNode.ChildNodes[5];
-                    xTrainInfo = xTrainInfo.LastChild.PreviousSibling;
-                    setXTrainFromSite(le, xTrainInfo.InnerText.Replace("\r", "").Split('\n'));
-
-                }
-
-                entryList.Add(le);
-                //Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
-
             }
         }
 
         private void setGenInfoFromSite(LogEntry le, HtmlNode genInfoNode)
         {
-            String[] genInfo = genInfoNode.InnerText.Replace("\r", "").Split('\n');
+            String[] genInfo = genInfoNode.InnerText.Replace("\r", "").Split('\n');  //cycle through and grab all relevant info
             int i = 0;
             String notes = genInfoNode.ChildNodes[3].ChildNodes[5].InnerHtml.Replace("<br>", "\n");
             while (!genInfo[i].StartsWith("Total distance")) i++;
@@ -85,17 +84,25 @@ namespace RALogConverter
             String avgHR = genInfo[i = i + 2];
             while (!genInfo[i].StartsWith("MAX HR")) i++;
             String maxHR = genInfo[i = i + 2];
+            String temp = "";
+            if (genInfoNode.InnerHtml.Contains(">Temperature<")) //temperature isn't present if there is no data, so don't spin looking for it if it isn't there
+            {
+                while (!genInfo[i].StartsWith("Temperature")) i++;
+                temp = genInfo[++i];
+            }
             while (!genInfo[i].StartsWith("Weight")) i++;
             String wt = genInfo[++i];
             while (!genInfo[i].StartsWith("Shoe")) i++;
             String shoe = genInfo[++i];
 
+            //set notes
             le.setNotes(notes);
 
+            //set distance and distance unit
             String[] distanceInfo = distanceStr.Split(' ');
             double distance = 0;
             String distanceUnit = "miles";
-            if (distanceInfo.Length > 1 && !distanceInfo[0].StartsWith("--") && !distanceInfo[0].Equals(""))
+            if (distanceInfo.Length > 1 && !distanceInfo[0].StartsWith("--") && !distanceInfo[0].Equals(""))  //make sure the distance string is valid
             {
                 distance = Double.Parse(distanceInfo[0]);
                 distanceUnit = distanceInfo[1].ToLower();
@@ -109,6 +116,7 @@ namespace RALogConverter
             le.setDistance(distance);
             le.setDistanceUnit(distanceUnit);
 
+            //set rating 
             int rating = Int32.Parse(effort.Substring(effort.IndexOf("Rating: ") + 8, effort.IndexOf("]") - effort.IndexOf("Rating: ") - 8));
             effort = effort.Substring(0, effort.IndexOf("&"));
             if (rating != 1)
@@ -128,6 +136,7 @@ namespace RALogConverter
                 le.setEffort(8);
             }
 
+            //set shoe information
             if (shoe.Length > 0)
             {
                 String equipmentBrand = null, equipmentModel = null;
@@ -148,7 +157,7 @@ namespace RALogConverter
                 }
             }
 
-
+            //set HRs
             if (morHR.Length > 0 && !morHR.Equals("--"))
                 le.setRestHR(Int32.Parse((morHR.Split(' '))[0]));
             if (avgHR.Length > 0 && !avgHR.Equals("--"))
@@ -156,15 +165,22 @@ namespace RALogConverter
             if (maxHR.Length > 0 && !maxHR.Equals("--"))
                 le.setMaxHR(Int32.Parse((maxHR.Split(' '))[0]));
 
+            //set weight
             wt = wt.Substring(0, wt.IndexOf("&"));
             double weight = Double.Parse(wt);
             le.setWeight(weight);
 
+            //set temp
+            if (temp.Length > 0)
+            {
+                int temp_Int = Int32.Parse(temp.Substring(0, temp.Length - 1));
+                le.setTemperature(temp_Int);
+            }
         }
 
         private void setDateActivityInfoFromSite(LogEntry le, string[] info)
         {
-            String dateStr = (info[2].Split(' '))[1];
+            String dateStr = (info[2].Split(' '))[1];  //grab date time activity
             String time = info[5];
             String activity = info[8];
             dateActivityHelper(le, dateStr, time, activity);
@@ -172,7 +188,7 @@ namespace RALogConverter
 
         private void setRaceInfoFromSite(LogEntry le, String[] raceInfo)
         {
-            LogEntry le2 = new LogEntry();
+            LogEntry le2 = new LogEntry();   //create an extra LogEntry and make it a race
             le2.setDate(le.getDate());
             le2.setActivity(le.getActivity());
             le2.setWorkout(le.getWorkout());
@@ -180,7 +196,7 @@ namespace RALogConverter
 
             le2.setNotes("***RACE***");
             int i = 0;
-            foreach (String s in raceInfo)
+            foreach (String s in raceInfo) //loop through all the strings
             {
                 if (!s.Equals(""))
                 {
@@ -189,10 +205,11 @@ namespace RALogConverter
                        || s.Contains("Overall Place") || s.Contains("Age Place")
                        || s.Contains("Race Splits")) && raceInfo[i + 1].Length > 0)
                     {
-                        le2.setNotes(le2.getNotes() + "\n" + s + ": " + raceInfo[i + 1]);
+                        le2.setNotes(le2.getNotes() + "\n" + s + ": " + raceInfo[i + 1]);  //add strings of data to notes
                     }
                     else if (s.Contains("Distance") && raceInfo[i + 1].Length > 0)
                     {
+                        //grab the distance of the race
                         String[] dist = raceInfo[i + 1].Split(new[] { "&nbsp;" }, StringSplitOptions.None);
                         double distance = Double.Parse(dist[0]);
                         le2.setDistance(distance);
@@ -200,15 +217,14 @@ namespace RALogConverter
                         if (!distanceUnit.EndsWith("s")) distanceUnit += "s";
                         le2.setDistanceUnit(distanceUnit);
 
-
+                        //convert to WU/CD units (only support for km, mi, and races in meters)
                         if (le.getDistanceUnit().Equals("miles") && distanceUnit.Equals("kilometers"))
-                        {//convert to WU/CD units (only support for km, mi, and races in meters )
+                        {
                             distance /= 1.609;
                         }
                         else if (le.getDistanceUnit().Equals("kilometers") && distanceUnit.Equals("miles"))
                         {
                             distance *= 1.609;
-
                         }
                         else if (distanceUnit.Equals("meters") && le.getDistanceUnit().Equals("miles"))
                         {
@@ -225,6 +241,7 @@ namespace RALogConverter
 
 
                     }
+                    //grab the time of the race
                     else if (s.Contains("Time") && raceInfo[i + 2].Length > 0)
                     {
                         double duration = parseDuration(raceInfo[i + 2]);
@@ -234,6 +251,7 @@ namespace RALogConverter
                             le.setDuration(le.getDuration() - duration); //compensate for time run in race
                         }
                     }
+                    //grab the notes of the race
                     else if (s.Contains("Comments") && raceInfo[i + 1].Length > 0)
                     {
                         le2.setNotes(le2.getNotes() + "\n\n" + raceInfo[i + 1]);
@@ -254,28 +272,28 @@ namespace RALogConverter
             StringBuilder sb = new StringBuilder();
             sb.Append("***INTERVAL***\nWarm-up: ");
             int i = 0;
-            while (!intervalInfo[i].StartsWith(" Warm-up: ")) i++;
+            while (!intervalInfo[i].StartsWith(" Warm-up: ")) i++;   //find warm up info
             i++;
             sb.Append(intervalInfo[i]);
-            while (!intervalInfo[i].StartsWith("Set rest ")) i++;
+            while (!intervalInfo[i].StartsWith("Set rest ")) i++;    //get the index to the right spot to grab interval data
             i = i + 3;
             sb.Append("\nSet...Reps...Distance/Time...Goal...Actual...Rep rest...Set rest\n");
             while (i < intervalInfo.Length - 4)
             {
-
-                sb.Append(intervalInfo[i] + "........." + // set
-                        intervalInfo[i + 1] + "....." + // reps
+                //if there isn't a value for a field, put underscores; separate fields with an ellipsis
+                sb.Append(intervalInfo[i] + "........." +                                                  // set
+                        intervalInfo[i + 1] + "....." +                                                    // reps
                           intervalInfo[i + 2].Replace("&nbsp;", "") + " " + intervalInfo[i + 3] + "...." + // dist/time
-                        (intervalInfo[i + 4].Equals("") ? "____" : intervalInfo[i + 4]) + "...." + // goals
-                        (intervalInfo[i + 5].Equals("") ? "____" : intervalInfo[i + 5]) + "...." + // Actual
-                        (intervalInfo[i + 6].Equals("") ? "____" : intervalInfo[i + 6]) + "...." + // rep rest
-                        (intervalInfo[i + 7].Equals("") ? "____" : intervalInfo[i + 7]) + "\n"); // set rest
+                        (intervalInfo[i + 4].Equals("") ? "____" : intervalInfo[i + 4]) + "...." +         // goals
+                        (intervalInfo[i + 5].Equals("") ? "____" : intervalInfo[i + 5]) + "...." +         // Actual
+                        (intervalInfo[i + 6].Equals("") ? "____" : intervalInfo[i + 6]) + "...." +         // rep rest
+                        (intervalInfo[i + 7].Equals("") ? "____" : intervalInfo[i + 7]) + "\n");           // set rest
                 i = i + 10;
             }
             i++;
-            sb.Append("Cool-down: " + intervalInfo[i]);
+            sb.Append("Cool-down: " + intervalInfo[i]);   //find cool down info
 
-            sb.Append("\n\n" + le.getNotes());
+            sb.Append("\n\n" + le.getNotes());            //append this interval as notes to the main entry
             le.setNotes(sb.ToString());
 
 
@@ -286,60 +304,13 @@ namespace RALogConverter
             String xtComments = xTrainInfo[2].Trim();
             if (xtComments.Length > 0)
             {
-                le.setNotes(le.getNotes() + "\n\nCross Training Comments:\n" + xtComments);
+                le.setNotes(le.getNotes() + "\n\nCross Training Comments:\n" + xtComments);   //add xtrain comments to main entry comments
             }
-        }
-
-        public void translate(HtmlDocument doc)
-        {
-            HtmlNodeCollection tables = doc.DocumentNode.SelectNodes("//table");
-            for (int i = 0; i < tables.Count; i++)
-            {
-                HtmlNode dateInfo = tables[i];
-                if (dateInfo.Id.Equals("Table1"))
-                {
-                    HtmlNode genInfo = dateInfo.NextSibling.NextSibling;
-                    HtmlNode raceIntervalInfo = null;
-                    HtmlNode crossTrainingComments = null;
-                    HtmlNode otherInfo = genInfo.NextSibling;
-                    LogEntry le = new LogEntry();
-                    if (otherInfo.InnerHtml.Contains(">Cross Training Info:"))
-                    {
-                        crossTrainingComments = otherInfo;
-                        otherInfo = otherInfo.NextSibling;
-                    }
-                    if (otherInfo.InnerHtml.Contains(">Interval Information:") || otherInfo.InnerHtml.Contains(">Race Information:"))
-                    {
-                        raceIntervalInfo = otherInfo;
-                        otherInfo = otherInfo.NextSibling;
-                    }
-
-
-                    setDateActivityInfo(le, dateInfo);
-                    setGenInfo(le, genInfo);
-                    if (raceIntervalInfo != null) setRaceIntervalInfo(le, raceIntervalInfo);
-                    if (crossTrainingComments != null && !crossTrainingComments.InnerHtml.Contains("display:none")) setXTrainComments(le, crossTrainingComments);
-                    setOtherInfo(le, otherInfo);  //dummy method -- no RA data to parse here
-
-                    this.entryList.Add(le);
-                    Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-            }
-        }
-
-        private void setDateActivityInfo(LogEntry le, HtmlNode dateInfo)
-        {
-            //"MM/dd/yyyy HH:mm:ss"
-            String dateStr = dateInfo.ChildNodes[0].ChildNodes[0].ChildNodes[0].InnerHtml;
-            dateStr = dateStr.Substring(dateStr.IndexOf(",") + 2);
-            String time = dateInfo.ChildNodes[0].ChildNodes[1].ChildNodes[0].InnerHtml;
-            String activity = dateInfo.ChildNodes[0].ChildNodes[2].ChildNodes[0].InnerHtml;
-            dateActivityHelper(le, dateStr, time, activity);
         }
 
         private void dateActivityHelper(LogEntry le, String dateStr, String time, String activity)
         {
-            if (time.Equals("Morning"))
+            if (time.Equals("Morning"))  //no standard times in r2w other than these four options
             {
                 time = " 10:00:00";
             }
@@ -357,19 +328,20 @@ namespace RALogConverter
             }
             else
             {
-                time = " 12:00:00";
+                time = " 12:00:00";     //default time is noon
             }
             DateTime date;
 
             date = DateTime.Parse(dateStr + time,
                           System.Globalization.CultureInfo.InvariantCulture);
-            le.setDate(date);            
+            le.setDate(date);
             parseAndSetActivity(le, activity);
         }
 
         private void parseAndSetActivity(LogEntry le, String activity)
         {
             String workout = "Normal";
+            //this supports bike, swim, ski, rest, cross training, and elliptical
             if (activity.ToLower().Contains("bike") || activity.ToLower().Contains("bicyle"))
             {
                 activity = "Bike";
@@ -398,6 +370,7 @@ namespace RALogConverter
             }
             else
             {
+                //get rid of redundant words
                 workout = activity.Replace("run", "").Replace("Run", "").Replace("Training", "").Replace("training", "").Replace("workout", "").Replace("Workout", "").Trim();
                 activity = "Run";
 
@@ -408,7 +381,67 @@ namespace RALogConverter
 
         }
 
-        private void setGenInfo(LogEntry le, HtmlNode genInfo)
+        private double parseDuration(String dur)
+        {
+            double duration = 0;
+            if (dur.Length > 0)
+            {
+                String[] durationInfo = (dur.Split(' '))[0].Split(':');//assumes time is first part of text field. removes any other text options
+                for (int i = 0; i < durationInfo.Length; i++)
+                {
+                    duration += Double.Parse(durationInfo[durationInfo.Length - i - 1]) * Math.Pow(60, i);  //sets duration as a double float of seconds  10 min 30 sec --> 630 sec
+                }
+            }
+            return duration;
+        }
+
+        public void translate(HtmlDocument doc)//NOT USED FOR WEBSITE CRAWLING
+        {
+            HtmlNodeCollection tables = doc.DocumentNode.SelectNodes("//table");
+            for (int i = 0; i < tables.Count; i++)
+            {
+                HtmlNode dateInfo = tables[i];
+                if (dateInfo.Id.Equals("Table1"))
+                {
+                    HtmlNode genInfo = dateInfo.NextSibling.NextSibling;
+                    HtmlNode raceIntervalInfo = null;
+                    HtmlNode crossTrainingComments = null;
+                    HtmlNode otherInfo = genInfo.NextSibling;
+                    LogEntry le = new LogEntry();
+                    if (otherInfo.InnerHtml.Contains(">Cross Training Info:"))
+                    {
+                        crossTrainingComments = otherInfo;
+                        otherInfo = otherInfo.NextSibling;
+                    }
+                    if (otherInfo.InnerHtml.Contains(">Interval Information:") || otherInfo.InnerHtml.Contains(">Race Information:"))
+                    {
+                        raceIntervalInfo = otherInfo;
+                        otherInfo = otherInfo.NextSibling;
+                    }
+
+
+                    setDateActivityInfo(le, dateInfo);
+                    setGenInfo(le, genInfo);
+                    if (raceIntervalInfo != null) setRaceIntervalInfo(le, raceIntervalInfo);
+                    if (crossTrainingComments != null && !crossTrainingComments.InnerHtml.Contains("display:none")) setXTrainComments(le, crossTrainingComments);
+
+                    this.entryList.Add(le);
+                    Console.WriteLine(le.getDate().ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+        }
+
+        private void setDateActivityInfo(LogEntry le, HtmlNode dateInfo)//NOT USED FOR WEBSITE CRAWLING
+        {
+            //"MM/dd/yyyy HH:mm:ss"
+            String dateStr = dateInfo.ChildNodes[0].ChildNodes[0].ChildNodes[0].InnerHtml;
+            dateStr = dateStr.Substring(dateStr.IndexOf(",") + 2);
+            String time = dateInfo.ChildNodes[0].ChildNodes[1].ChildNodes[0].InnerHtml;
+            String activity = dateInfo.ChildNodes[0].ChildNodes[2].ChildNodes[0].InnerHtml;
+            dateActivityHelper(le, dateStr, time, activity);
+        }
+
+        private void setGenInfo(LogEntry le, HtmlNode genInfo)//NOT USED FOR WEBSITE CRAWLING
         {
             HtmlNodeCollection eList = genInfo.ChildNodes;
             foreach (HtmlNode e in eList)
@@ -518,21 +551,7 @@ namespace RALogConverter
 
         }
 
-        private double parseDuration(String dur)
-        {
-            double duration = 0;
-            if (dur.Length > 0)
-            {
-                String[] durationInfo = (dur.Split(' '))[0].Split(':');//assumes time is first part of text field. removes any other text options
-                for (int i = 0; i < durationInfo.Length; i++)
-                {
-                    duration += Double.Parse(durationInfo[durationInfo.Length - i - 1]) * Math.Pow(60, i);
-                }
-            }
-            return duration;
-        }
-
-        private void setRaceIntervalInfo(LogEntry le, HtmlNode raceIntervalInfo)
+        private void setRaceIntervalInfo(LogEntry le, HtmlNode raceIntervalInfo)//NOT USED FOR WEBSITE CRAWLING
         {
             if (raceIntervalInfo.InnerHtml.Contains("Interval Information:"))
             {//interval -- tried to print it out with spacing, but RA doesn't support it.  It just trims it
@@ -647,12 +666,7 @@ namespace RALogConverter
 
         }
 
-        private void setOtherInfo(LogEntry le, HtmlNode otherInfo)
-        {
-            //no data to get for RA here
-        }
-
-        private void setXTrainComments(LogEntry le, HtmlNode crossTrainingComments)
+        private void setXTrainComments(LogEntry le, HtmlNode crossTrainingComments)//NOT USED FOR WEBSITE CRAWLING
         {
             String xtComments = crossTrainingComments.LastChild.LastChild.InnerText;
             if (xtComments.Length > 0)
@@ -660,10 +674,6 @@ namespace RALogConverter
                 le.setNotes(le.getNotes() + "\nCross Training Comments:\n" + xtComments);
             }
         }
-
-
-
-
 
     }
 }
